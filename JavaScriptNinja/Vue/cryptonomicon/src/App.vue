@@ -47,7 +47,7 @@
 						</div>
 						<div
 							v-if="autoSearch.length"
-							class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
+							class="flex bg-white p-1 rounded-md shadow-md flex-wrap"
 						>
 							<span
 								v-for="item in autoSearch"
@@ -118,7 +118,7 @@
 								{{ t.name }} - USD
 							</dt>
 							<dd class="mt-1 text-3xl font-semibold text-gray-900">
-								{{ t.price }}
+								{{ formatPrice(t.price) }}
 							</dd>
 						</div>
 						<div class="w-full border-t border-gray-200"></div>
@@ -189,6 +189,8 @@
 </template>
 
 <script>
+import { subscribeToTicker, unsubscribeFromTicker } from './api';
+
 export default {
 	name: 'App',
 	data() {
@@ -226,7 +228,9 @@ export default {
 		if (tickersData) {
 			this.tickers = JSON.parse(tickersData);
 			this.tickers.forEach((ticker) => {
-				this.subscribeToUpdates(ticker.name);
+				subscribeToTicker(ticker.name, (newPrice) =>
+					this.updateTicker(ticker.name, newPrice)
+				);
 			});
 		}
 
@@ -254,7 +258,6 @@ export default {
 
 				if (this.autoSearch.length < 4) {
 					if (ticker.includes(value.toUpperCase())) {
-						console.log('gd');
 						this.autoSearch.push(ticker);
 					}
 				}
@@ -333,23 +336,16 @@ export default {
 	},
 
 	methods: {
-		subscribeToUpdates(tickerName) {
-			setInterval(async () => {
-				const f = await fetch(
-					`https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD&api_key=146cc75ee439e1c2cb61a9f7bac53d0e8e8f948c23d1a38d0cfc5bec00428a66`
-				);
+		updateTicker(tickeraName, price) {
+			this.tickers
+				.filter((t) => t.name !== tickeraName)
+				.forEach((t) => (t.price = price));
+		},
 
-				const data = await f.json();
+		formatPrice(price) {
+			if (price === '-') return price;
 
-				this.tickers.find((t) => t.name === tickerName).price = data.USD
-					? data.USD.toFixed(2)
-					: data.USD.toPrecision(2);
-
-				if (this.selelectedTicker?.name === tickerName) {
-					this.graph.push(data.USD);
-				}
-			}, 3000);
-			this.ticker = '';
+			return price > 1 ? price.toFixed(2) : price.toPrecision(2);
 		},
 
 		add(ticker = '') {
@@ -366,8 +362,10 @@ export default {
 			if (!ticker) {
 				this.filter = '';
 			}
-
-			this.subscribeToUpdates(currentTicker.name);
+			this.ticker = '';
+			subscribeToTicker(currentTicker.name, (newPrice) =>
+				this.updateTicker(currentTicker.name, newPrice)
+			);
 		},
 
 		select(ticker) {
@@ -380,6 +378,8 @@ export default {
 			if (this.selelectedTicker === tickerToRemove) {
 				this.selelectedTicker = null;
 			}
+
+			unsubscribeFromTicker(tickerToRemove.name);
 		},
 	},
 };
